@@ -1,0 +1,11 @@
+{
+  "name": "madan-mehandi-udhyog-monorepo",
+  "private": true,
+  "workspaces": [
+    "mmu-ecommerce"
+  ],
+  "scripts": {
+    "build": "npm --prefix mmu-ecommerce run build",
+    "dev": "npm --prefix mmu-ecommerce run dev"
+  }
+}
