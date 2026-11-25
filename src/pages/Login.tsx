@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
@@ -22,7 +22,7 @@ import {
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { refreshProfile, signInWithGoogle } = useAuth();
+  const { user, refreshProfile, signInWithGoogle, establishOtpSession } = useAuth();
 
   // Auth Mode: 'password' | 'email_otp'
   const [authMode, setAuthMode] = useState<'password' | 'email_otp'>('password');
@@ -41,43 +41,80 @@ export default function Login() {
   // isEmailOtpLoginFlow: true for plain Email-OTP login (not Google)
   const [isEmailOtpLoginFlow, setIsEmailOtpLoginFlow] = useState(false);
   const [resendTimer, setResendTimer] = useState(30);
+  const googleOtpDispatchedRef = useRef(false);
 
   // Check if returning from Google OAuth or active session needing 2FA confirmation
   useEffect(() => {
     const checkGoogleRedirect = async () => {
-      const hash = window.location.hash;
-      const search = window.location.search;
+      if (otpStep || googleOtpDispatchedRef.current) return;
 
-      if (hash.includes('access_token=') || search.includes('google_callback=true')) {
-        setLoading(true);
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      let pendingTs = 0;
+      try {
+        pendingTs = Number(localStorage.getItem('mmu_google_oauth_pending') || '0');
+      } catch (_) {}
+
+      const isGoogleReturn =
+        (pendingTs > 0 && Date.now() - pendingTs < 10 * 60 * 1000) ||
+        hash.includes('access_token=') ||
+        hash === '#' ||
+        search.includes('google_callback=true') ||
+        search.includes('code=');
+
+      if (!isGoogleReturn) return;
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const activeUser = session?.user || user;
+        if (!activeUser || !activeUser.email) return;
+
+        googleOtpDispatchedRef.current = true;
         try {
-          const { data: { session }, error } = await supabase.auth.getSession();
-          if (session?.user) {
-            const userEmail = session.user.email || '';
-            const fullName = session.user.user_metadata?.full_name || 'Valued Customer';
-            setGoogleUserTemp(session.user);
-            setIsGoogleOtpFlow(true);
-            setOtpSentEmail(userEmail);
-            setOtpStep(true);
+          localStorage.removeItem('mmu_google_oauth_pending');
+        } catch (_) {}
 
-            // Dispatch real OTP to the Google account email address
-            const otpRes = await sendEmailOtp(userEmail, 'google_signin', fullName);
-            if (otpRes.emailSent) {
-              toast.success(`Google Account Confirmed! Verification code sent to ${userEmail}.`);
-            } else {
-              toast.error('SMTP not configured. Please configure SMTP in Admin Settings to receive OTP.');
-            }
-          }
-        } catch (err: any) {
-          console.error('Error handling Google OAuth redirect:', err);
-        } finally {
-          setLoading(false);
+        const userEmail = activeUser.email.toLowerCase().trim();
+        const fullName =
+          activeUser.user_metadata?.full_name ||
+          activeUser.user_metadata?.name ||
+          'Valued Customer';
+
+        setGoogleUserTemp(activeUser);
+        setIsGoogleOtpFlow(true);
+        setOtpSentEmail(userEmail);
+        setOtpStep(true);
+        setResendTimer(60);
+
+        // Clean URL hash/query so refresh doesn't re-trigger
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState({}, document.title, '/login');
         }
+
+        // Prevent duplicate OTP dispatch within 12 seconds (React StrictMode protection)
+        const lastSentKey = `mmu_last_otp_${userEmail}`;
+        const lastSentTs = Number(sessionStorage.getItem(lastSentKey) || '0');
+        if (Date.now() - lastSentTs < 12000) {
+          return;
+        }
+        sessionStorage.setItem(lastSentKey, String(Date.now()));
+
+        setLoading(true);
+        const otpRes = await sendEmailOtp(userEmail, 'google_signin', fullName);
+        if (otpRes.emailSent) {
+          toast.success(`Google Account Confirmed! 6-digit OTP sent to ${userEmail}.`);
+        } else {
+          toast.error('Failed to send OTP email. Please check SMTP configuration.');
+        }
+      } catch (err: any) {
+        console.error('Error handling Google OAuth redirect:', err);
+      } finally {
+        setLoading(false);
       }
     };
 
     checkGoogleRedirect();
-  }, []);
+  }, [user, otpStep, location.search]);
 
   // Countdown timer for OTP resend
   useEffect(() => {
@@ -93,6 +130,16 @@ export default function Login() {
     setEmail('admin@madanmehandi.com');
     setPassword('AdminPassword@123');
     toast.success('Admin credentials autofilled!', { icon: '🔑' });
+  };
+
+  const getSafeRedirectTarget = (role?: string) => {
+    const rawFrom = (location.state as any)?.from?.pathname;
+    const from =
+      rawFrom && rawFrom !== '/login' && rawFrom !== '/register' ? rawFrom : null;
+    if (role === 'admin') {
+      return from || '/admin';
+    }
+    return from || '/';
   };
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
@@ -117,7 +164,7 @@ export default function Login() {
 
       if (data.user) {
         toast.success('Signed in successfully!');
-        await handleRedirectAfterLogin(data.user.id);
+        await handleRedirectAfterLogin(data.user.id, data.user.email);
       }
     } catch (err: any) {
       toast.error(err.message || 'An unexpected error occurred');
@@ -132,24 +179,19 @@ export default function Login() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
+        try {
+          localStorage.removeItem('mmu_google_oauth_pending');
+        } catch (_) {}
+
         // Google OAuth provider not configured — use Email+OTP as secure fallback
-        const promptEmail = email.trim() || window.prompt('Enter your Google account email to sign in with OTP:');
+        const promptEmail =
+          email.trim() || window.prompt('Enter your Google account email to sign in with OTP:');
         if (promptEmail && promptEmail.includes('@')) {
           const cleanEmail = promptEmail.toLowerCase().trim();
           setIsGoogleOtpFlow(true);
           setIsEmailOtpLoginFlow(true);
           setOtpSentEmail(cleanEmail);
 
-          // 1. Tell Supabase to send its own magic-link/OTP (creates auth session on verify)
-          const { error: otpErr } = await supabase.auth.signInWithOtp({
-            email: cleanEmail,
-            options: { shouldCreateUser: true },
-          });
-          if (otpErr) {
-            console.warn('[Google fallback] Supabase signInWithOtp error:', otpErr.message);
-          }
-
-          // 2. Also send our custom SMTP OTP
           const otpRes = await sendEmailOtp(cleanEmail, 'google_signin');
 
           setOtpStep(true);
@@ -183,15 +225,6 @@ export default function Login() {
     setLoading(true);
     try {
       const cleanEmail = email.trim().toLowerCase();
-
-      // 1. Tell Supabase to allow OTP verification (creates/reuses auth session on verifyOtp)
-      const { error: sbErr } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: { shouldCreateUser: true },
-      });
-      if (sbErr) console.warn('[Email OTP] Supabase signInWithOtp error:', sbErr.message);
-
-      // 2. Also send our custom SMTP OTP
       const otpRes = await sendEmailOtp(cleanEmail, 'signin');
 
       setOtpSentEmail(cleanEmail);
@@ -222,98 +255,36 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // ── BRANCH A: Google OAuth redirect — user already has a Supabase session ──
-      if (isGoogleOtpFlow && googleUserTemp) {
-        // Just verify our custom OTP as 2FA confirmation
-        const verifyRes = await verifyEmailOtp(otpSentEmail, cleanCode, 'google_signin');
-        if (!verifyRes.success) {
-          toast.error(verifyRes.message || 'Invalid or expired OTP code.');
-          setLoading(false);
-          return;
-        }
-        toast.success('Google sign-in verified! Welcome back.');
-        await handleRedirectAfterLogin(googleUserTemp.id);
+      const verifyRes = await verifyEmailOtp(
+        otpSentEmail,
+        cleanCode,
+        isGoogleOtpFlow ? 'google_signin' : 'signin'
+      );
+
+      if (!verifyRes.success) {
+        toast.error(verifyRes.message || 'Invalid or expired OTP code.');
+        setLoading(false);
         return;
       }
 
-      // ── BRANCH B: Google email fallback OR plain Email OTP login ──
-      // Both flows called supabase.auth.signInWithOtp() first, so verifyOtp creates a real session
-      if (isGoogleOtpFlow || isEmailOtpLoginFlow) {
-        // First verify our custom OTP from the DB
-        const verifyRes = await verifyEmailOtp(
-          otpSentEmail,
-          cleanCode,
-          isGoogleOtpFlow ? 'google_signin' : 'signin'
-        );
-        if (!verifyRes.success) {
-          toast.error(verifyRes.message || 'Invalid or expired OTP code.');
-          setLoading(false);
-          return;
-        }
+      try {
+        localStorage.removeItem('mmu_google_oauth_pending');
+      } catch (_) {}
 
-        // Now establish a real Supabase session using verifyOtp (magic link token)
-        // The token Supabase sends in email is different from our custom OTP.
-        // We try with our OTP first (works if Supabase also used same number), then fall back.
-        const { data: sbData, error: sbErr } = await supabase.auth.verifyOtp({
-          email: otpSentEmail,
-          token: cleanCode,
-          type: 'email',
-        });
+      // 1. Check if we have a real Supabase Auth user (from Google OAuth or existing session)
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const activeAuthUser = googleUserTemp || currentSession?.user || user;
 
-        if (!sbErr && sbData?.user) {
-          // Supabase session established ✅
-          toast.success('Sign-in verified! Welcome.');
-          await upsertProfileAndRedirect(sbData.user);
-          return;
-        }
-
-        // Supabase OTP token didn't match (expected — Supabase sends a different token).
-        // Try to get an existing session (user may already be authenticated from signInWithOtp magic link)
-        const { data: { session: existingSession } } = await supabase.auth.getSession();
-        if (existingSession?.user) {
-          toast.success('Sign-in verified! Welcome.');
-          await upsertProfileAndRedirect(existingSession.user);
-          return;
-        }
-
-        // Last resort: if OTP matched our custom DB check, the user proved they own the email.
-        // Create/find their profile and navigate. 
-        // This path means they verified identity but browser may not hold session yet.
-        toast.success('OTP verified! Redirecting...');
-        // Try password-less session via signInWithOtp again + prompt to click magic link
-        const { error: retryErr } = await supabase.auth.signInWithOtp({
-          email: otpSentEmail,
-          options: { shouldCreateUser: true },
-        });
-        if (!retryErr) {
-          toast('Check your email for a sign-in link, or try Password Sign-In if you have an account.', {
-            icon: '📧',
-            duration: 6000,
-          });
-          setOtpStep(false);
-          setIsGoogleOtpFlow(false);
-          setIsEmailOtpLoginFlow(false);
-        } else {
-          navigate('/', { replace: true });
-        }
+      if (activeAuthUser && activeAuthUser.id && currentSession?.user) {
+        toast.success('Sign-in verified! Welcome to Madan Mehandi Udhyog.');
+        await upsertProfileAndRedirect(activeAuthUser);
         return;
       }
 
-      // ── BRANCH C: Fallback — check for any active session ──
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData?.user) {
-        const verifyRes = await verifyEmailOtp(otpSentEmail, cleanCode, 'signin');
-        if (!verifyRes.success) {
-          toast.error(verifyRes.message || 'Invalid or expired OTP code.');
-          setLoading(false);
-          return;
-        }
-        toast.success('Signed in successfully!');
-        await handleRedirectAfterLogin(userData.user.id);
-      } else {
-        toast.error('Session expired. Please sign in again.');
-        setOtpStep(false);
-      }
+      // 2. Custom SMTP OTP flow (Email OTP tab or Google email fallback)
+      const otpProfile = await establishOtpSession(otpSentEmail);
+      toast.success('Sign-in verified! Welcome to Madan Mehandi Udhyog.');
+      navigate(getSafeRedirectTarget(otpProfile.role), { replace: true });
     } catch (err: any) {
       toast.error(err.message || 'Failed to verify OTP');
     } finally {
@@ -322,51 +293,58 @@ export default function Login() {
   };
 
   // Helper: upsert profile row and redirect based on role
-  const upsertProfileAndRedirect = async (user: any) => {
+  const upsertProfileAndRedirect = async (authUser: any) => {
     try {
-      // Ensure a profile row exists
       const { data: existing } = await supabase
         .from('profiles')
         .select('id, role')
-        .eq('id', user.id)
-        .single();
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      const cleanEmail = (authUser.email || otpSentEmail || '').toLowerCase().trim();
+      const defaultRole = cleanEmail === 'admin@madanmehandi.com' ? 'admin' : 'customer';
 
       if (!existing) {
-        // Create profile for new users
-        await supabase.from('profiles').upsert({
-          id: user.id,
-          email: user.email || otpSentEmail,
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Customer',
-          role: 'customer',
-        });
+        await supabase.from('profiles').upsert(
+          {
+            id: authUser.id,
+            email: cleanEmail,
+            full_name:
+              authUser.user_metadata?.full_name ||
+              authUser.user_metadata?.name ||
+              cleanEmail.split('@')[0] ||
+              'Customer',
+            role: defaultRole,
+            avatar_url:
+              authUser.user_metadata?.avatar_url ||
+              authUser.user_metadata?.picture ||
+              null,
+          },
+          { onConflict: 'id' }
+        );
       }
 
       await refreshProfile();
-      const from = (location.state as any)?.from?.pathname;
-      const role = existing?.role || 'customer';
-      navigate(role === 'admin' ? (from || '/admin') : (from || '/'), { replace: true });
+      const role = existing?.role || defaultRole;
+      navigate(getSafeRedirectTarget(role), { replace: true });
     } catch {
       navigate('/', { replace: true });
     }
   };
 
-  const handleRedirectAfterLogin = async (userId: string) => {
-    // Ensure profile exists in profiles table
+  const handleRedirectAfterLogin = async (userId: string, userEmail?: string) => {
     try {
-      const { data: profile } = await supabase
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       await refreshProfile();
-      const from = (location.state as any)?.from?.pathname;
-
-      if (profile?.role === 'admin') {
-        navigate(from || '/admin', { replace: true });
-      } else {
-        navigate(from || '/', { replace: true });
-      }
+      const role =
+        profileData?.role ||
+        (userEmail === 'admin@madanmehandi.com' ? 'admin' : 'customer');
+      navigate(getSafeRedirectTarget(role), { replace: true });
     } catch {
       navigate('/', { replace: true });
     }

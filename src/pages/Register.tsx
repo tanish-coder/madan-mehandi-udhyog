@@ -21,7 +21,7 @@ import {
 
 export default function Register() {
   const navigate = useNavigate();
-  const { signInWithGoogle, refreshProfile } = useAuth();
+  const { signInWithGoogle, refreshProfile, establishOtpSession } = useAuth();
   const [form, setForm] = useState({
     full_name: '',
     email: '',
@@ -119,52 +119,63 @@ export default function Register() {
         return;
       }
 
-      toast.success('Email verified successfully! Creating your MMU account...');
+      toast.success('Email verified successfully! Activating your MMU account...');
+
+      const passwordToUse =
+        form.password && form.password.length >= 6
+          ? form.password
+          : `Mmu@${Math.random().toString(36).slice(-8)}1A`;
 
       // Finalize Supabase Auth Sign Up
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
-        password: form.password,
+        password: passwordToUse,
         options: {
           data: {
-            full_name: form.full_name.trim(),
+            full_name: form.full_name.trim() || cleanEmail.split('@')[0],
           },
         },
       });
 
       if (error) {
-        // If user already exists or signup has restriction, provide helpful feedback
-        if (error.message.includes('already registered')) {
-          toast.error('This email is already registered. Please sign in instead.');
-          navigate('/login');
-          return;
+        if (error.message.toLowerCase().includes('already registered')) {
+          // Try signing in with provided password if already registered
+          if (form.password) {
+            await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password: form.password,
+            });
+          }
+        } else {
+          console.warn('Supabase signUp notice:', error.message);
         }
-        toast.error(error.message);
-        setLoading(false);
-        return;
       }
 
-      if (data.user) {
-        // Ensure profile row exists
+      if (data?.user) {
         try {
           await supabase.from('profiles').upsert(
             {
               id: data.user.id,
-              full_name: form.full_name.trim(),
+              email: cleanEmail,
+              full_name: form.full_name.trim() || cleanEmail.split('@')[0],
               role: 'customer',
               updated_at: new Date().toISOString(),
             },
             { onConflict: 'id' }
           );
         } catch (_) {}
-
-        await refreshProfile();
-        toast.success('Account created & verified! Welcome to Madan Mehandi Udhyog.');
-        navigate('/', { replace: true });
-      } else {
-        toast.success('Account registered! Please sign in.');
-        navigate('/login', { replace: true });
       }
+
+      // Check if an active Supabase session was created; otherwise establish verified OTP session
+      const { data: { session: activeSession } } = await supabase.auth.getSession();
+      if (activeSession?.user) {
+        await refreshProfile();
+      } else {
+        await establishOtpSession(cleanEmail, form.full_name.trim() || cleanEmail.split('@')[0]);
+      }
+
+      toast.success('Account created & verified! Welcome to Madan Mehandi Udhyog.');
+      navigate('/', { replace: true });
     } catch (err: any) {
       toast.error(err.message || 'Failed to complete registration.');
     } finally {

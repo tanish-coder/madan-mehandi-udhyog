@@ -30,6 +30,16 @@ export default function Navbar() {
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
+  // If Google OAuth redirected to "/" instead of "/login", forward to "/login?google_callback=true" for mandatory OTP verification
+  useEffect(() => {
+    try {
+      const pendingTs = Number(localStorage.getItem('mmu_google_oauth_pending') || '0');
+      if (pendingTs > 0 && Date.now() - pendingTs < 10 * 60 * 1000 && user) {
+        navigate('/login?google_callback=true', { replace: true });
+      }
+    } catch (_) {}
+  }, [user, navigate]);
+
   // Close profile dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
