@@ -308,7 +308,7 @@ export function smtpServerPlugin(): Plugin {
         if (req.method === 'POST' && url === '/api/verify-otp') {
           try {
             const body = await parseJsonBody(req);
-            const { email, otp, purpose } = body;
+            const { email, otp } = body;
 
             if (!email || !otp) {
               return sendJsonResponse(res, 400, { success: false, message: 'Email and OTP code are required.' });

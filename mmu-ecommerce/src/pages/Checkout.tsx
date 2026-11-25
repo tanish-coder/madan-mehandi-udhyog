@@ -125,7 +125,7 @@ export default function Checkout() {
         .map((c) => `${c.quantity}x ${c.product.name} (${c.packSize || '100 gm'})`)
         .join(', ');
       const fullAddress = `${shippingAddress.line1}, ${shippingAddress.city}, ${shippingAddress.state} - ${shippingAddress.postal_code}, India`;
-      const customerFullName = form.full_name || `${form.first_name || ''} ${form.last_name || ''}`.trim() || 'Valued Customer';
+      const customerFullName = form.full_name || 'Valued Customer';
 
       dispatchOrderConfirmation({
         orderId,

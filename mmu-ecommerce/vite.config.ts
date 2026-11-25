@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
-import { smtpServerPlugin } from './src/server/smtpPlugin'
+import { smtpServerPlugin } from './src/server/smtpPlugin.ts'
 
 export default defineConfig({
   plugins: [react(), smtpServerPlugin()],
