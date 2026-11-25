@@ -295,7 +295,10 @@ export default function Login() {
         .maybeSingle();
 
       const cleanEmail = (authUser.email || otpSentEmail || '').toLowerCase().trim();
-      const defaultRole = cleanEmail === 'admin@madanmehandi.com' ? 'admin' : 'customer';
+      const defaultRole =
+        cleanEmail === 'admin@madanmehandi.com' || cleanEmail === 'rs5621614@gmail.com'
+          ? 'admin'
+          : 'customer';
 
       if (!existing) {
         await supabase.from('profiles').upsert(
@@ -334,9 +337,12 @@ export default function Login() {
         .maybeSingle();
 
       await refreshProfile();
+      const cleanEmail = (userEmail || '').toLowerCase().trim();
       const role =
         profileData?.role ||
-        (userEmail === 'admin@madanmehandi.com' ? 'admin' : 'customer');
+        (cleanEmail === 'admin@madanmehandi.com' || cleanEmail === 'rs5621614@gmail.com'
+          ? 'admin'
+          : 'customer');
       navigate(getSafeRedirectTarget(role), { replace: true });
     } catch {
       navigate('/', { replace: true });

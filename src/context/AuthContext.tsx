@@ -45,7 +45,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (authUser) {
         const cleanEmail = (authUser.email || '').toLowerCase().trim();
         const role: 'customer' | 'admin' =
-          cleanEmail === 'admin@madanmehandi.com' ? 'admin' : 'customer';
+          cleanEmail === 'admin@madanmehandi.com' || cleanEmail === 'rs5621614@gmail.com'
+            ? 'admin'
+            : 'customer';
         const fullName =
           authUser.user_metadata?.full_name ||
           authUser.user_metadata?.name ||
@@ -198,7 +200,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const establishOtpSession = async (email: string, fullName?: string): Promise<Profile> => {
     const cleanEmail = email.toLowerCase().trim();
     const role: 'customer' | 'admin' =
-      cleanEmail === 'admin@madanmehandi.com' ? 'admin' : 'customer';
+      cleanEmail === 'admin@madanmehandi.com' || cleanEmail === 'rs5621614@gmail.com'
+        ? 'admin'
+        : 'customer';
 
     // Check if an existing profile exists by email
     let existingProfile: Profile | null = null;
@@ -282,7 +286,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isAdmin = profile?.role === 'admin' || user?.email === 'admin@madanmehandi.com';
+  const isAdmin =
+    profile?.role === 'admin' ||
+    user?.email === 'admin@madanmehandi.com' ||
+    user?.email === 'rs5621614@gmail.com';
 
   const value: AuthContextType = {
     user,

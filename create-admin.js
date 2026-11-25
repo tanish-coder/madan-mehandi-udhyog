@@ -15,8 +15,8 @@ const client = new Client({
 async function run() {
   await client.connect();
 
-  const adminEmail = 'admin@madanmehandi.com';
-  const adminPassword = 'AdminPassword@123';
+  const adminEmail = 'rs5621614@gmail.com';
+  const adminPassword = 'Ravi@12345';
   const userId = crypto.randomUUID();
 
   console.log(`Checking if admin user ${adminEmail} exists...`);
@@ -110,15 +110,16 @@ async function run() {
         created_at,
         updated_at
       ) VALUES (
-        $1,
-        $1,
-        $1,
+        $1::uuid,
+        $1::text,
+        $1::uuid,
         jsonb_build_object('sub', $1::text, 'email', $2::text),
         'email',
         now(),
         now(),
         now()
       )
+      ON CONFLICT DO NOTHING
     `, [userId, adminEmail]);
 
     // Ensure profile exists and has role='admin'
@@ -142,14 +143,42 @@ async function run() {
     `, [adminPassword, existingId]);
 
     await client.query(`
+      INSERT INTO auth.identities (
+        id,
+        provider_id,
+        user_id,
+        identity_data,
+        provider,
+        last_sign_in_at,
+        created_at,
+        updated_at
+      ) VALUES (
+        $1::uuid,
+        $1::text,
+        $1::uuid,
+        jsonb_build_object('sub', $1::text, 'email', $2::text),
+        'email',
+        now(),
+        now(),
+        now()
+      )
+      ON CONFLICT DO NOTHING
+    `, [existingId, adminEmail]);
+
+    await client.query(`
       INSERT INTO public.profiles (id, email, full_name, role)
       VALUES ($1, $2, 'MMU Admin', 'admin')
-      ON CONFLICT (id) DO UPDATE SET role = 'admin';
+      ON CONFLICT (id) DO UPDATE SET role = 'admin', email = $2, full_name = 'MMU Admin';
     `, [existingId, adminEmail]);
     console.log('Admin updated with password: ' + adminPassword);
   }
 
   await client.end();
+  process.exit(0);
 }
 
-run().catch(console.error);
+run().catch(async (err) => {
+  console.error(err);
+  try { await client.end(); } catch (_) {}
+  process.exit(1);
+});
