@@ -41,13 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return data as Profile;
       }
 
-      // If profile row doesn't exist yet for an authenticated user, create it
+      // If profile row doesn't exist yet for an authenticated user, create it with default 'customer' role
       if (authUser) {
         const cleanEmail = (authUser.email || '').toLowerCase().trim();
-        const role: 'customer' | 'admin' =
-          cleanEmail === 'admin@madanmehandi.com' || cleanEmail === 'rs5621614@gmail.com'
-            ? 'admin'
-            : 'customer';
+        const role: 'customer' | 'admin' = 'customer';
         const fullName =
           authUser.user_metadata?.full_name ||
           authUser.user_metadata?.name ||
@@ -196,15 +193,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Establish an authenticated user session after custom SMTP OTP verification
+   * Role is loaded directly from the Supabase profiles table
    */
   const establishOtpSession = async (email: string, fullName?: string): Promise<Profile> => {
     const cleanEmail = email.toLowerCase().trim();
-    const role: 'customer' | 'admin' =
-      cleanEmail === 'admin@madanmehandi.com' || cleanEmail === 'rs5621614@gmail.com'
-        ? 'admin'
-        : 'customer';
 
-    // Check if an existing profile exists by email
+    // Check if an existing profile exists by email in the database
     let existingProfile: Profile | null = null;
     try {
       const { data } = await supabase
@@ -234,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       fallbackId =
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
-          : 'b4f9fd46-a40d-4ffa-b627-a4ac2c2d2cb5';
+          : '00000000-0000-0000-0000-000000000000';
     }
 
     const activeProfile: Profile = existingProfile || {
@@ -242,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: cleanEmail,
       full_name: fullName || cleanEmail.split('@')[0] || 'Valued Customer',
       phone: null,
-      role,
+      role: 'customer',
       avatar_url: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -286,10 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isAdmin =
-    profile?.role === 'admin' ||
-    user?.email === 'admin@madanmehandi.com' ||
-    user?.email === 'rs5621614@gmail.com';
+  const isAdmin = profile?.role === 'admin';
 
   const value: AuthContextType = {
     user,

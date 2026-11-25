@@ -157,7 +157,7 @@ export default function Login() {
 
       if (data.user) {
         toast.success('Signed in successfully!');
-        await handleRedirectAfterLogin(data.user.id, data.user.email);
+        await handleRedirectAfterLogin(data.user.id);
       }
     } catch (err: any) {
       toast.error(err.message || 'An unexpected error occurred');
@@ -285,7 +285,7 @@ export default function Login() {
     }
   };
 
-  // Helper: upsert profile row and redirect based on role
+  // Helper: upsert profile row and redirect based on role from database
   const upsertProfileAndRedirect = async (authUser: any) => {
     try {
       const { data: existing } = await supabase
@@ -295,10 +295,6 @@ export default function Login() {
         .maybeSingle();
 
       const cleanEmail = (authUser.email || otpSentEmail || '').toLowerCase().trim();
-      const defaultRole =
-        cleanEmail === 'admin@madanmehandi.com' || cleanEmail === 'rs5621614@gmail.com'
-          ? 'admin'
-          : 'customer';
 
       if (!existing) {
         await supabase.from('profiles').upsert(
@@ -310,7 +306,7 @@ export default function Login() {
               authUser.user_metadata?.name ||
               cleanEmail.split('@')[0] ||
               'Customer',
-            role: defaultRole,
+            role: 'customer',
             avatar_url:
               authUser.user_metadata?.avatar_url ||
               authUser.user_metadata?.picture ||
@@ -321,14 +317,14 @@ export default function Login() {
       }
 
       await refreshProfile();
-      const role = existing?.role || defaultRole;
+      const role = existing?.role || 'customer';
       navigate(getSafeRedirectTarget(role), { replace: true });
     } catch {
       navigate('/', { replace: true });
     }
   };
 
-  const handleRedirectAfterLogin = async (userId: string, userEmail?: string) => {
+  const handleRedirectAfterLogin = async (userId: string) => {
     try {
       const { data: profileData } = await supabase
         .from('profiles')
@@ -337,12 +333,7 @@ export default function Login() {
         .maybeSingle();
 
       await refreshProfile();
-      const cleanEmail = (userEmail || '').toLowerCase().trim();
-      const role =
-        profileData?.role ||
-        (cleanEmail === 'admin@madanmehandi.com' || cleanEmail === 'rs5621614@gmail.com'
-          ? 'admin'
-          : 'customer');
+      const role = profileData?.role || 'customer';
       navigate(getSafeRedirectTarget(role), { replace: true });
     } catch {
       navigate('/', { replace: true });

@@ -35,14 +35,14 @@ async function getStoredSmtpSettings() {
   const envDefaults = {
     host: process.env.SMTP_HOST || process.env.VITE_SMTP_HOST || 'smtp.gmail.com',
     port: Number(process.env.SMTP_PORT || process.env.VITE_SMTP_PORT || 587),
-    username: process.env.SMTP_USER || process.env.VITE_SMTP_USER || 'rs5621614@gmail.com',
+    username: process.env.SMTP_USER || process.env.VITE_SMTP_USER || '',
     password: process.env.SMTP_PASS || process.env.VITE_SMTP_PASS || '',
     from_email:
       process.env.SMTP_FROM_EMAIL ||
       process.env.VITE_SMTP_FROM_EMAIL ||
       process.env.SMTP_USER ||
       process.env.VITE_SMTP_USER ||
-      'rs5621614@gmail.com',
+      '',
     from_name:
       process.env.SMTP_FROM_NAME || process.env.VITE_SMTP_FROM_NAME || 'Madan Mehandi Udhyog',
     encryption: process.env.SMTP_ENCRYPTION || process.env.VITE_SMTP_ENCRYPTION || 'tls',

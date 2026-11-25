@@ -85,9 +85,9 @@ export const DEFAULT_TEMPLATES: NotificationTemplate[] = [
 export const DEFAULT_SMTP: SmtpSettings = {
   host: import.meta.env.VITE_SMTP_HOST || 'smtp.gmail.com',
   port: Number(import.meta.env.VITE_SMTP_PORT || 587),
-  username: import.meta.env.VITE_SMTP_USER || 'rs5621614@gmail.com',
+  username: import.meta.env.VITE_SMTP_USER || '',
   password: '',
-  from_email: import.meta.env.VITE_SMTP_FROM_EMAIL || 'rs5621614@gmail.com',
+  from_email: import.meta.env.VITE_SMTP_FROM_EMAIL || '',
   from_name: import.meta.env.VITE_SMTP_FROM_NAME || 'Madan Mehandi Udhyog',
   encryption: (import.meta.env.VITE_SMTP_ENCRYPTION as 'tls' | 'ssl' | 'none') || 'tls',
   is_enabled: true,

@@ -22,6 +22,13 @@ photos/
 .env.local
 .env.*.local
 
+# Local Database & Admin Setup Scripts
+create-admin.js
+setup-*.js
+setup-*.cjs
+seed-*.js
+seed-*.cjs
+
 # Vercel
 .vercel
 
@@ -35,3 +42,6 @@ photos/
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
+.env*
