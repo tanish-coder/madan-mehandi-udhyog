@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd mmu-ecommerce && npm run build",
+  "outputDirectory": "mmu-ecommerce/dist",
+  "installCommand": "cd mmu-ecommerce && npm install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
