@@ -140,7 +140,7 @@ export default function AdminCustomizer() {
   // ── 1. SLIDE HANDLERS ──
   const handleOpenAddSlide = () => {
     setEditingSlide({
-      id: `slide-${Date.now()}`,
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'b1000000-0000-0000-0000-000000000001',
       name: '',
       slug: '',
       badge: 'Flagship &bull; Triple-Sifted',

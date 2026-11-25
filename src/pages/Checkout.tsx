@@ -103,16 +103,56 @@ export default function Checkout() {
 
       const orderId = orderData.id;
 
-      // 2. Insert order items into Supabase order_items table
-      const orderItems = cart.map((item) => ({
-        order_id: orderId,
-        product_id: item.product.id,
-        product_name: item.product.name,
-        price_snapshot: Number(item.product.price),
-        quantity: item.quantity,
-        pack_size: item.packSize || '100 gm',
-        subtotal: Number(item.product.price) * item.quantity,
-      }));
+      // Helper to check valid UUID format
+      const isValidUuid = (id?: string) =>
+        id ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) : false;
+
+      // 2. Insert order items into Supabase order_items table with safe UUID validation
+      const orderItems = await Promise.all(
+        cart.map(async (item) => {
+          let validProductId: string | null = isValidUuid(item.product.id) ? item.product.id : null;
+
+          // If product ID was from a hero slide (e.g. slide-4), resolve to real product UUID
+          if (!validProductId && item.product.slug) {
+            try {
+              const { data: matchedProduct } = await supabase
+                .from('products')
+                .select('id')
+                .eq('slug', item.product.slug)
+                .maybeSingle();
+              if (matchedProduct?.id && isValidUuid(matchedProduct.id)) {
+                validProductId = matchedProduct.id;
+              }
+            } catch (_) {}
+          }
+
+          // Fallback by product name match if still no UUID
+          if (!validProductId && item.product.name) {
+            try {
+              const firstNameWord = item.product.name.split(' ')[0];
+              const { data: matchedProduct } = await supabase
+                .from('products')
+                .select('id')
+                .ilike('name', `%${firstNameWord}%`)
+                .limit(1)
+                .maybeSingle();
+              if (matchedProduct?.id && isValidUuid(matchedProduct.id)) {
+                validProductId = matchedProduct.id;
+              }
+            } catch (_) {}
+          }
+
+          return {
+            order_id: orderId,
+            product_id: validProductId,
+            product_name: item.product.name,
+            price_snapshot: Number(item.product.price),
+            quantity: item.quantity,
+            pack_size: item.packSize || '100 gm',
+            subtotal: Number(item.product.price) * item.quantity,
+          };
+        })
+      );
 
       const { error: itemsErr } = await supabase
         .from('order_items')

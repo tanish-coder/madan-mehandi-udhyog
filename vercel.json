@@ -1,6 +1,5 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "mmu-ecommerce/dist",
+  "framework": "vite",
   "rewrites": [
     {
       "source": "/(.*)",

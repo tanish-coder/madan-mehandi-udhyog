@@ -1,38 +1,35 @@
-# Dependencies
-node_modules/
-mmu-ecommerce/node_modules/
-
-# Production builds
-dist/
-mmu-ecommerce/dist/
-dist-ssr/
-mmu-ecommerce/dist-ssr/
-
-# Environment variables & secrets
-.env
-.env.local
-.env.*.local
-mmu-ecommerce/.env
-mmu-ecommerce/.env.local
-mmu-ecommerce/.env.*.local
-
 # Logs
+logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
 
 # Photos & Media
 photos/
-mmu-ecommerce/photos/
 *.mp4
 
-# Editor & OS files
-.DS_Store
-Thumbs.db
-.idea/
+# Environment variables & secrets
+.env
+.env.example
+.env.*
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+.idea
+.DS_Store
 *.suo
 *.ntvs*
 *.njsproj

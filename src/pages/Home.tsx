@@ -36,9 +36,9 @@ export default function Home() {
   // Dynamic Hero Slides from Admin Customizer (min 4 default slides)
   const defaultFallbackSlides: HeroSlide[] = [
     {
-      id: 'slide-1',
+      id: 'b1000000-0000-0000-0000-000000000001',
       name: '3 Filter Henna Powder',
-      slug: '3-filter-henna-powder',
+      slug: 'henna-powder',
       badge: 'Flagship &bull; Triple-Sifted',
       subtitle: 'Silk-Cloth Filtered for Bridal Cones',
       description: 'Micro-fine cloth filtered specifically for bridal cone paste artists and chemical-free hair dyeing. Zero nozzle clogs, intense dye release within 4–6 hours.',
@@ -49,9 +49,9 @@ export default function Home() {
       is_active: true,
     },
     {
-      id: 'slide-2',
+      id: 'b1000000-0000-0000-0000-000000000001',
       name: 'Organic Henna Powder',
-      slug: 'organic-henna-powder',
+      slug: 'henna-powder',
       badge: '100% Certified Organic',
       subtitle: 'Pure Lawsonia Inermis Harvest',
       description: 'Grown naturally in Sojat’s mineral-rich soil without synthetic chemical pesticides. Maximum natural lawsone content for deep scalp cooling and mahogany stains.',
@@ -62,7 +62,7 @@ export default function Home() {
       is_active: true,
     },
     {
-      id: 'slide-3',
+      id: 'b1000000-0000-0000-0000-000000000005',
       name: 'Indigo Powder',
       slug: 'indigo-powder',
       badge: 'Pure Botanical Hair Dye',
@@ -75,9 +75,9 @@ export default function Home() {
       is_active: true,
     },
     {
-      id: 'slide-4',
+      id: 'b1000000-0000-0000-0000-000000000001',
       name: 'Herbal Henna Powder',
-      slug: 'herbal-henna-powder',
+      slug: 'henna-powder',
       badge: '9 Ayurvedic Herbs Infused',
       subtitle: 'Complete Hair & Scalp Therapy',
       description: 'Fortified with Amla, Shikakai, Reetha, Brahmi, Bhringraj, and Neem. Revitalizes hair follicles, arrests premature graying, and delivers silky texture.',
@@ -335,8 +335,10 @@ export default function Home() {
                         onClick={() => {
                           const slide = currentSlides[sliderIndex];
                           if (!slide) return;
+                          const isValidUuid = (id?: string) =>
+                            id ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) : false;
                           const matched = featuredProducts.find((p) => p.slug === slide.slug) || {
-                            id: slide.id || `slider-${slide.slug}`,
+                            id: isValidUuid(slide.id) ? slide.id : 'b1000000-0000-0000-0000-000000000001',
                             name: slide.name,
                             slug: slide.slug,
                             price: slide.price,
