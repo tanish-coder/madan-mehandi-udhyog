@@ -170,11 +170,21 @@ export default function AdminSettings() {
           }
           if (row.key === 'smtp_settings' && row.value) {
             setSmtpSettings((prev) => ({ ...prev, ...row.value }));
+            if (row.value.from_email || row.value.username) {
+              setSmtpTestRecipient(row.value.from_email || row.value.username);
+              setTestRecipient(row.value.from_email || row.value.username);
+            }
           }
           if (row.key === 'notifications_log' && row.value) {
             setNotificationLogs(row.value);
           }
         });
+      }
+
+      // Fetch real-time logs from dedicated notification_logs table
+      const liveLogs = await getNotificationLogs();
+      if (liveLogs && liveLogs.length > 0) {
+        setNotificationLogs(liveLogs);
       }
 
       // Fetch database counts

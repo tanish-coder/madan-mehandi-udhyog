@@ -83,13 +83,13 @@ export const DEFAULT_TEMPLATES: NotificationTemplate[] = [
 ];
 
 export const DEFAULT_SMTP: SmtpSettings = {
-  host: 'smtp.gmail.com',
-  port: 587,
-  username: 'orders@madanmehandi.com',
+  host: import.meta.env.VITE_SMTP_HOST || 'smtp.gmail.com',
+  port: Number(import.meta.env.VITE_SMTP_PORT || 587),
+  username: import.meta.env.VITE_SMTP_USER || 'rs5621614@gmail.com',
   password: '',
-  from_email: 'orders@madanmehandi.com',
-  from_name: 'Madan Mehandi Udhyog',
-  encryption: 'tls',
+  from_email: import.meta.env.VITE_SMTP_FROM_EMAIL || 'rs5621614@gmail.com',
+  from_name: import.meta.env.VITE_SMTP_FROM_NAME || 'Madan Mehandi Udhyog',
+  encryption: (import.meta.env.VITE_SMTP_ENCRYPTION as 'tls' | 'ssl' | 'none') || 'tls',
   is_enabled: true,
   auto_send_order: true,
   auto_send_payment: true,
@@ -182,20 +182,32 @@ export async function saveSmtpSettings(settings: SmtpSettings): Promise<void> {
 }
 
 /**
- * Fetch recent notification logs
+ * Fetch recent notification logs from dedicated Supabase notification_logs table
  */
 export async function getNotificationLogs(): Promise<NotificationLogEntry[]> {
   try {
     const { data, error } = await supabase
+      .from('notification_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (!error && data && data.length > 0) {
+      return data as NotificationLogEntry[];
+    }
+
+    // Fallback to settings table if legacy logs exist
+    const { data: legacy } = await supabase
       .from('settings')
       .select('value')
       .eq('key', 'notifications_log')
       .single();
 
-    if (error || !data?.value || !Array.isArray(data.value)) {
-      return [];
+    if (legacy?.value && Array.isArray(legacy.value)) {
+      return legacy.value as NotificationLogEntry[];
     }
-    return data.value as NotificationLogEntry[];
+
+    return [];
   } catch (err) {
     console.error('Failed to get notification logs:', err);
     return [];
@@ -203,30 +215,28 @@ export async function getNotificationLogs(): Promise<NotificationLogEntry[]> {
 }
 
 /**
- * Append a record to notification logs in Supabase
+ * Append a record to notification_logs table in Supabase
  */
 export async function logNotification(
   entry: Omit<NotificationLogEntry, 'id' | 'created_at'>
 ): Promise<void> {
   try {
-    const current = await getNotificationLogs();
-    const newLog: NotificationLogEntry = {
-      ...entry,
-      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      created_at: new Date().toISOString(),
-    };
+    const { error } = await supabase.from('notification_logs').insert({
+      recipient_email: entry.recipient_email,
+      recipient_phone: entry.recipient_phone || null,
+      template_name: entry.template_name,
+      template_title: entry.template_title,
+      subject: entry.subject,
+      body: entry.body,
+      order_id: entry.order_id || null,
+      payment_id: entry.payment_id || null,
+      status: entry.status,
+      channel: entry.channel || 'email',
+    });
 
-    // Keep last 100 entries
-    const updated = [newLog, ...current].slice(0, 100);
-
-    await supabase.from('settings').upsert(
-      {
-        key: 'notifications_log',
-        value: updated,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'key' }
-    );
+    if (error) {
+      console.warn('Fallback logging to settings table:', error.message);
+    }
   } catch (err) {
     console.error('Failed to append notification log:', err);
   }
@@ -476,13 +486,18 @@ export async function dispatchTestNotification(params: {
 }
 
 /**
- * Test SMTP connection and dispatch test verification mail
+ * Test SMTP connection, save settings to Supabase, and dispatch test verification mail
  */
 export async function testSmtpConnection(
   smtp: SmtpSettings,
   recipientEmail?: string
 ): Promise<{ success: boolean; message: string; error?: string; hint?: string; code?: string }> {
   try {
+    // Always persist SMTP settings to Supabase database first
+    try {
+      await saveSmtpSettings(smtp);
+    } catch (_) {}
+
     const res = await fetch('/api/test-smtp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -494,9 +509,21 @@ export async function testSmtpConnection(
         password: smtp.password,
         from_email: smtp.from_email,
         from_name: smtp.from_name,
+        is_enabled: smtp.is_enabled,
+        auto_send_order: smtp.auto_send_order,
+        auto_send_payment: smtp.auto_send_payment,
         recipient_email: recipientEmail || smtp.from_email || smtp.username,
       }),
     });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return {
+        success: false,
+        message: 'SMTP API endpoint returned unexpected format.',
+        error: `HTTP ${res.status}: Expected JSON response from /api/test-smtp`,
+      };
+    }
 
     const data = await res.json();
     return data;
@@ -513,7 +540,12 @@ export async function testSmtpConnection(
  * Clear all notification logs in Supabase
  */
 export async function clearNotificationLogs(): Promise<void> {
-  const { error } = await supabase.from('settings').upsert(
+  await supabase
+    .from('notification_logs')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000');
+
+  await supabase.from('settings').upsert(
     {
       key: 'notifications_log',
       value: [],
@@ -521,5 +553,4 @@ export async function clearNotificationLogs(): Promise<void> {
     },
     { onConflict: 'key' }
   );
-  if (error) throw error;
 }

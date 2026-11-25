@@ -32,6 +32,23 @@ function sendJsonResponse(res: any, statusCode: number, data: any) {
 }
 
 async function getStoredSmtpSettings() {
+  const envDefaults = {
+    host: process.env.SMTP_HOST || process.env.VITE_SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT || process.env.VITE_SMTP_PORT || 587),
+    username: process.env.SMTP_USER || process.env.VITE_SMTP_USER || 'rs5621614@gmail.com',
+    password: process.env.SMTP_PASS || process.env.VITE_SMTP_PASS || '',
+    from_email:
+      process.env.SMTP_FROM_EMAIL ||
+      process.env.VITE_SMTP_FROM_EMAIL ||
+      process.env.SMTP_USER ||
+      process.env.VITE_SMTP_USER ||
+      'rs5621614@gmail.com',
+    from_name:
+      process.env.SMTP_FROM_NAME || process.env.VITE_SMTP_FROM_NAME || 'Madan Mehandi Udhyog',
+    encryption: process.env.SMTP_ENCRYPTION || process.env.VITE_SMTP_ENCRYPTION || 'tls',
+    is_enabled: true,
+  };
+
   try {
     const { data } = await supabase
       .from('settings')
@@ -39,21 +56,22 @@ async function getStoredSmtpSettings() {
       .eq('key', 'smtp_settings')
       .single();
     if (data && data.value) {
-      return data.value;
+      return {
+        ...envDefaults,
+        ...data.value,
+        host: data.value.host || envDefaults.host,
+        port: Number(data.value.port || envDefaults.port),
+        username: data.value.username || envDefaults.username,
+        password: data.value.password || envDefaults.password,
+        from_email: data.value.from_email || data.value.username || envDefaults.from_email,
+        from_name: data.value.from_name || envDefaults.from_name,
+        encryption: data.value.encryption || envDefaults.encryption,
+      };
     }
   } catch (err) {
     console.error('[SMTP Plugin] Error fetching smtp_settings from Supabase:', err);
   }
-  return {
-    host: 'smtp.gmail.com',
-    port: 587,
-    username: 'orders@madanmehandi.com',
-    password: '',
-    from_email: 'orders@madanmehandi.com',
-    from_name: 'Madan Mehandi Udhyog',
-    encryption: 'tls',
-    is_enabled: true,
-  };
+  return envDefaults;
 }
 
 export function smtpServerPlugin(): Plugin {
@@ -66,20 +84,42 @@ export function smtpServerPlugin(): Plugin {
         // 1. POST /api/test-smtp
         if (req.method === 'POST' && url === '/api/test-smtp') {
           try {
+            const stored = await getStoredSmtpSettings();
             const body = await parseJsonBody(req);
-            const {
-              host = 'smtp.gmail.com',
-              port = 587,
-              username = '',
-              password = '',
-              encryption = 'tls',
-              from_email = 'orders@madanmehandi.com',
-              from_name = 'Madan Mehandi Udhyog',
-              recipient_email = 'orders@madanmehandi.com',
-            } = body;
+            const host = body.host || stored.host || 'smtp.gmail.com';
+            const port = body.port || stored.port || 587;
+            const username = body.username || stored.username || '';
+            const password = body.password || stored.password || '';
+            const encryption = body.encryption || stored.encryption || 'tls';
+            const from_email = body.from_email || stored.from_email || username || 'orders@madanmehandi.com';
+            const from_name = body.from_name || stored.from_name || 'Madan Mehandi Udhyog';
+            const recipient_email = body.recipient_email || from_email || username;
 
             const portNum = Number(port) || 587;
             const isSecure = encryption === 'ssl' || portNum === 465;
+
+            if (host && username && password) {
+              try {
+                await supabase.from('settings').upsert(
+                  {
+                    key: 'smtp_settings',
+                    value: {
+                      ...stored,
+                      host,
+                      port: portNum,
+                      username,
+                      password,
+                      encryption,
+                      from_email,
+                      from_name,
+                      is_enabled: true,
+                    },
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: 'key' }
+                );
+              } catch (_) {}
+            }
 
             console.log(`[SMTP Plugin] Testing connection to ${host}:${portNum} for user: ${username}`);
 
